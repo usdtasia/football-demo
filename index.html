@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="AI-разбор матча Барс - Өзгөн, Жогорку Лига 2026, 8-тур: игроки, скелеты, физика, владение, передачи. Сделано 1dev.uz">
+<meta property="og:title" content="Матч-центр Барс - Өзгөн">
+<meta property="og:description" content="AI-разбор матча: игроки, скелеты, физика, владение, передачи. Сделано 1dev.uz">
+<title>Матч-центр Барс - Өзгөн</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Unbounded:wght@500;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: match-centre. Scoreboard band, then video + live tactical board side by side,
+   then team comparison, player table with a detail card, pass networks and shape over time. */
+:root {
+  --paper: #f6f7f4;        /* page ground, faint pitch-chalk tint */
+  --card: #ffffff;
+  --ink: #17202b;          /* text */
+  --ink-2: #5a6472;        /* secondary text */
+  --line: #dfe3dd;         /* hairlines */
+  --turf: #e9f0e6;         /* pitch surfaces */
+  --turf-line: #c3d3be;
+  --accent: #1f4fd1;       /* league blue, for controls and focus */
+  --good: #1f8a4c;
+  --bad: #c2412d;
+  --warn: #b7791f;
+  --display: "Unbounded", "Golos Text", system-ui, sans-serif;
+  --body: "Golos Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 14px; line-height: 1.45; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+h2 { font-family: var(--display); font-weight: 500; font-size: 17px; letter-spacing: .01em; }
+.eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--ink-2); }
+section { padding-block: 22px; display: grid; gap: 14px; }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+
+/* scoreboard band */
+.band { background: var(--card); border-bottom: 1px solid var(--line); }
+.band .wrap { padding-block: 18px 14px; display: grid; gap: 14px; }
+.score { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.score .teams { display: flex; align-items: center; gap: 14px; font-family: var(--display); font-weight: 700; font-size: clamp(22px, 4vw, 34px); }
+.kit { width: 14px; height: 30px; border-radius: 3px; display: inline-block; }
+.score .meta { color: var(--ink-2); font-size: 13px; max-width: 520px; }
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.tab { border: 1px solid var(--line); background: var(--paper); color: var(--ink); border-radius: 8px; padding: 8px 12px; font: inherit; cursor: pointer; text-align: left; display: grid; gap: 2px; }
+.tab b { font-weight: 600; }
+.tab span { font-size: 12px; color: var(--ink-2); }
+.tab[aria-selected="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: #fff; }
+.tab:focus-visible, button:focus-visible, th button:focus-visible, tr:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* KPI strip */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.kpi { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px; }
+.kpi .v { font-family: var(--display); font-size: 20px; font-weight: 500; }
+.kv { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; min-width: 0; }
+.kv b { font-family: var(--display); font-size: 18px; font-weight: 500; white-space: nowrap; }
+.tn { font-size: 12px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.tn i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.pair { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.split { height: 8px; border-radius: 4px; overflow: hidden; display: flex; background: var(--line); }
+.split i { display: block; height: 100%; }
+
+/* stage: video + board */
+.stage { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 900px) { .stage { grid-template-columns: minmax(0, 1fr); } }
+.player { padding: 10px; display: grid; gap: 8px; }
+.vbox { position: relative; background: #0d1117; border-radius: 6px; overflow: hidden; aspect-ratio: 16 / 9; max-width: 100%; }
+.vbox video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.vbox video.off { visibility: hidden; }
+.ctrl { display: flex; align-items: center; gap: 10px; }
+.ctrl button { border: 1px solid var(--line); background: var(--paper); border-radius: 6px; padding: 6px 10px; font: inherit; cursor: pointer; min-width: 74px; }
+.scrub { position: relative; flex: 1; height: 26px; cursor: pointer; }
+.scrub canvas { width: 100%; height: 100%; display: block; }
+.clock { font-family: var(--mono); font-size: 12px; color: var(--ink-2); min-width: 92px; text-align: right; }
+.board { padding: 10px; display: grid; gap: 8px; }
+.board canvas { width: 100%; height: auto; display: block; border-radius: 6px; background: var(--turf); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); align-items: center; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; vertical-align: -1px; margin-right: 5px; border: 1.5px solid #fff; box-shadow: 0 0 0 1px var(--line); }
+.feed { max-height: 230px; overflow-y: auto; border-top: 1px solid var(--line); }
+.feed button { width: 100%; display: grid; grid-template-columns: 52px 74px 1fr; gap: 8px; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: none; padding: 6px 4px; font: inherit; cursor: pointer; align-items: center; }
+.feed button:hover { background: var(--paper); }
+.feed button.now { background: #eef2fd; }
+.chip { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px; justify-self: start; white-space: nowrap; }
+.chip.pass { background: #e4f3ea; color: var(--good); }
+.chip.turnover { background: #fbe9e5; color: var(--bad); }
+.chip.shot { background: #fdf3df; color: var(--warn); }
+.chip.tag { background: var(--paper); color: var(--ink-2); border: 1px solid var(--line); font-weight: 500; }
+.tagrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* team comparison */
+.compare { padding: 6px 16px 14px; }
+.crow { display: grid; grid-template-columns: 1fr minmax(120px, 180px) 1fr; gap: 12px; align-items: center; padding-block: 7px; border-bottom: 1px solid var(--line); }
+.crow:last-child { border-bottom: 0; }
+.crow .lab { text-align: center; color: var(--ink-2); font-size: 12px; }
+.bar { display: flex; align-items: center; gap: 8px; }
+.bar.l { flex-direction: row-reverse; }
+.bar i { height: 8px; border-radius: 4px; display: block; min-width: 2px; }
+.bar b { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 44px; }
+.bar.l b { text-align: right; }
+
+/* players */
+.players { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 980px) { .players { grid-template-columns: minmax(0, 1fr); } }
+.tablebox { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 8px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font-size: 11px; color: var(--ink-2); font-weight: 600; letter-spacing: .03em; position: sticky; top: 0; background: var(--card); }
+th button { background: none; border: 0; font: inherit; color: inherit; cursor: pointer; padding: 0; }
+th button[aria-sort] { color: var(--ink); }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--paper); }
+tbody tr[aria-selected="true"] { background: #eef2fd; }
+.pname { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.card { padding: 14px; display: grid; gap: 12px; }
+.card canvas { width: 100%; height: auto; display: block; border-radius: 6px; background: var(--turf); }
+.stats3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stats3 div { background: var(--paper); border-radius: 8px; padding: 8px 10px; display: grid; }
+.stats3 b { font-family: var(--display); font-weight: 500; font-size: 17px; }
+.stats3 span { font-size: 11px; color: var(--ink-2); }
+svg text { font-family: var(--body); }
+
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 760px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.pad { padding: 14px; display: grid; gap: 10px; }
+.note { font-size: 13px; color: var(--ink-2); max-width: 75ch; }
+footer { padding-block: 26px 40px; color: var(--ink-2); font-size: 12px; }
+footer a { color: var(--ink); font-weight: 600; text-decoration: none; border-bottom: 1px solid currentColor; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="band">
+  <div class="wrap">
+    <div class="score">
+      <div class="teams" id="teams"></div>
+      <div class="meta" id="matchMeta">Жогорку Лига 2026, 8-тур. AI-разбор двух непрерывных фрагментов телетрансляции: игроки, скелеты, физика, владение, передачи.</div>
+    </div>
+    <div class="tabs" role="tablist" id="tabs"></div>
+  </div>
+</div>
+
+<main class="wrap">
+  <section>
+    <div class="kpis" id="kpis"></div>
+  </section>
+
+  <section style="padding-top:0">
+    <div class="stage">
+      <div class="panel player">
+        <div class="vbox" id="vbox"><video id="v0" playsinline muted preload="auto"></video><video id="v1" class="off" playsinline muted preload="auto"></video></div>
+        <div class="ctrl">
+          <button id="play" type="button">Пуск</button>
+          <div class="scrub" id="scrub"><canvas id="scrubc" height="52"></canvas></div>
+          <div class="clock num" id="clock">0:00</div>
+        </div>
+        <div class="legend" id="tlLegend"></div>
+        <div class="muted" id="vstat" style="font-size:12px"></div>
+      </div>
+      <div class="panel board">
+        <div class="pair"><div class="eyebrow">Схема поля, синхронно с видео</div><div class="eyebrow" id="ownerNow"></div></div>
+        <canvas id="pitch" width="1050" height="680"></canvas>
+        <div class="legend" id="legend"></div>
+        <div class="feed" id="feed"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="pair"><h2>Команды</h2><span class="muted" id="compareNote"></span></div>
+    <div class="panel compare" id="compare"></div>
+  </section>
+
+  <section>
+    <div class="pair"><h2>Игроки</h2><span class="muted">Нажмите на строку, чтобы открыть карточку игрока</span></div>
+    <div class="players">
+      <div class="panel tablebox"><table id="ptable"></table></div>
+      <div class="panel card" id="pcard"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Сеть передач</h2>
+    <div class="grid2" id="networks"></div>
+    <p class="note">Узел стоит в средней позиции игрока, толщина линии показывает число передач между парой. Передачи определены по смене владельца мяча.</p>
+  </section>
+
+  <section>
+    <h2>Тепловые карты команд</h2>
+    <div class="grid2" id="teamheat"></div>
+  </section>
+
+  <section>
+    <div class="pair"><h2>Средняя расстановка</h2><span class="muted">где каждый игрок находился в среднем за фрагмент</span></div>
+    <div class="panel pad"><canvas id="lineup" width="1050" height="680" style="width:100%;height:auto;border-radius:6px"></canvas><div class="legend" id="lineupLegend"></div></div>
+  </section>
+
+</main>
+<footer class="wrap" id="foot"></footer>
+
+<script src="segments.js"></script>
+<script>
+"use strict";
+const SEGMENTS = window.DEMO_SEGMENTS || [];
+const PL = 105, PW = 68;
+const ZONE_NAMES = { walk: "Шаг < 7", jog: "Трусца 7-14", run: "Бег 14-20", hsr: "Быстрый бег 20-25", sprint: "Спринт > 25" };
+const ZONE_COL = { walk: "#cfd8cc", jog: "#a8c1a0", run: "#e2b45a", hsr: "#e07b39", sprint: "#c2412d" };
+const state = { seg: 0, data: null, sel: null, sort: { key: "distance_m", dir: -1 }, t: 0, playing: false };
+const $ = (id) => document.getElementById(id);
+const fmt = (v, d = 0) => (v == null || Number.isNaN(v)) ? "-" : Number(v).toLocaleString("ru-RU", { minimumFractionDigits: d, maximumFractionDigits: d });
+const clockAt = (seg, t) => { const [m, s] = seg.clock.split(":").map(Number); const tot = m * 60 + s + Math.floor(t); return `${Math.floor(tot / 60)}:${String(tot % 60).padStart(2, "0")}`; };
+function teamOf(id) { return state.data.teams[String(id)]; }
+function playerById(id) { return state.data.players.find(p => p.id === id); }
+function pname(p) {
+  if (p.label && p.num) return `${p.label} #${p.num}`;
+  if (p.num) return `${teamOf(p.team).name} #${p.num}`;
+  if (p.label) return `${teamOf(p.team).name}, ${p.label}`;
+  return (p.role === "goalkeeper" ? "Вратарь" : "Игрок") + " ID " + p.id;
+}
+function dotText(p) { return p.num ? String(p.num) : ""; }
+
+/* ---------------- header + tabs */
+function renderHeader() {
+  const segs = SEGMENTS;
+  $("tabs").innerHTML = segs.map((s, i) => `<button class="tab" role="tab" type="button" id="tab${i}" aria-selected="${i === state.seg}"><b>${s.title}</b><span>${s.sub}</span></button>`).join("");
+  segs.forEach((s, i) => $("tab" + i).addEventListener("click", () => loadSeg(i)));
+}
+function renderTeams() {
+  const T = Object.values(state.data.teams).sort((a, b) => (a.name === "Барс" ? -1 : 1));
+  const sc = SEGMENTS[state.seg].score;
+  $("teams").innerHTML = `<span class="kit" style="background:${T[0].kit_color || T[0].color}"></span>${T[0].name}<span class="num" style="color:var(--ink-2)">${sc}</span>${T[1].name}<span class="kit" style="background:${T[1].kit_color || T[1].color}"></span>`;
+}
+
+/* ---------------- KPIs */
+function renderKpis() {
+  const d = state.data, T = Object.values(d.teams).sort((a, b) => (a.name === "Барс" ? -1 : 1));
+  const row = (t, val) => `<div class="kv"><span class="tn"><i style="background:${t.color}"></i>${t.name}</span><b class="num">${val}</b></div>`;
+  const card = (title, vals, foot = "") => `<div class="kpi"><div class="eyebrow">${title}</div>${row(T[0], vals[0])}${row(T[1], vals[1])}${foot}</div>`;
+  const a = T[0].stats, b = T[1].stats;
+  const pa = a.possession_pct ?? 0, pb = b.possession_pct ?? 0, tot = (pa + pb) || 1;
+  const k = [];
+  k.push(card("Владение мячом", [fmt(pa) + "%", fmt(pb) + "%"], `<div class="split"><i style="width:${pa / tot * 100}%;background:${T[0].color}"></i><i style="width:${pb / tot * 100}%;background:${T[1].color}"></i></div>`));
+  k.push(card("Передачи: точные из всех", [`${a.passes_completed} из ${a.passes}`, `${b.passes_completed} из ${b.passes}`], `<div class="muted num">точность ${fmt(a.pass_accuracy_pct)}% и ${fmt(b.pass_accuracy_pct)}%</div>`));
+  k.push(card("Удары", [fmt(a.shots), fmt(b.shots)]));
+  k.push(card("Темп, м/мин на игрока", [fmt(a.distance_per_player_min), fmt(b.distance_per_player_min)], `<div class="muted num">всего ${fmt(a.distance_m)} и ${fmt(b.distance_m)} м</div>`));
+  k.push(card("Спринты быстрее 25 км/ч", [fmt(a.sprints), fmt(b.sprints)], `<div class="muted num">бег > 20 км/ч: ${fmt(a.hsr_m)} и ${fmt(b.hsr_m)} м</div>`));
+  const top = d.players.filter(p => (p.measured_s || 0) >= 5).sort((x, y) => y.max_speed_kmh - x.max_speed_kmh)[0];
+  k.push(`<div class="kpi"><div class="eyebrow">Самый быстрый</div><div class="v num">${fmt(top ? top.max_speed_kmh : 0, 1)} км/ч</div><div class="muted">${top ? pname(top) + ", " + teamOf(top.team).name : ""}</div></div>`);
+  $("kpis").innerHTML = k.join("");
+}
+
+/* ---------------- video: chunked double-buffered player (chunks fetched as blobs) */
+const V = { el: [$("v0"), $("v1")], cur: 0, idx: 0, chunk: 15, n: 1, starts: [0] };
+const blobCache = new Map();
+function chunkBlob(i) {
+  const url = SEGMENTS[state.seg].video.files[i];
+  if (!blobCache.has(url)) blobCache.set(url, fetch(url).then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.blob(); })
+    .then(b => URL.createObjectURL(new Blob([b], { type: "video/mp4" }))).catch(e => { vlog("Видео: не удалось скачать фрагмент (" + e.message + ")"); return url; }));
+  return blobCache.get(url);
+}
+function vlog(msg) { const el = $("vstat"); if (el) el.textContent = msg; }
+async function loadInto(v, i, off, autoplay) {
+  v.dataset.idx = String(i);
+  vlog("Видео: загрузка фрагмента " + (i + 1) + " из " + V.n);
+  const u = await chunkBlob(i);
+  vlog("Видео: " + (String(u).startsWith("blob:") ? "фрагмент загружен" : "загрузка напрямую") + " (" + (i + 1) + "/" + V.n + ")");
+  if (v.dataset.idx !== String(i)) return;
+  await new Promise(res => { v.addEventListener("loadedmetadata", res, { once: true }); v.src = u; v.load(); });
+  v.currentTime = off || 0.04;   // forces the first picture to be decoded so the frame is not black
+  if (autoplay) v.play().catch(() => {});
+}
+function prefetchAll() { const n = SEGMENTS[state.seg].video.files.length; let p = Promise.resolve(); for (let i = 0; i < n; i++) p = p.then(() => chunkBlob(i)); }
+function setupVideo() {
+  const vs = SEGMENTS[state.seg].video;
+  V.chunk = vs.chunk; V.n = vs.files.length; V.idx = 0; V.cur = 0;
+  V.starts = vs.starts || vs.files.map((_, i) => i * vs.chunk);
+  V.el[0].classList.remove("off"); V.el[1].classList.add("off");
+  loadInto(V.el[0], 0, 0, false);
+  if (V.n > 1) loadInto(V.el[1], 1, 0, false);
+  prefetchAll();
+  state.t = 0; pause();
+}
+function active() { return V.el[V.cur]; }
+function globalTime() { return V.starts[V.idx] + (active().currentTime || 0); }
+function chunkAt(t) { let i = 0; while (i + 1 < V.n && V.starts[i + 1] <= t) i++; return i; }
+function seek(t) {
+  const dur = state.data.meta.duration_s;
+  t = Math.max(0, Math.min(dur - 0.05, t));
+  const i = chunkAt(t);
+  const off = t - V.starts[i];
+  if (i !== V.idx) {
+    V.idx = i;
+    loadInto(active(), i, off, state.playing);
+    if (i + 1 < V.n) loadInto(V.el[1 - V.cur], i + 1, 0, false);
+  } else {
+    active().currentTime = off;
+  }
+  state.t = t; drawFrame();
+}
+function play() { state.playing = true; $("play").textContent = "Пауза"; active().play().catch(() => {}); }
+function pause() { state.playing = false; $("play").textContent = "Пуск"; V.el.forEach(v => v.pause()); }
+V.el.forEach(v => v.addEventListener("error", () => vlog("Видео: ошибка воспроизведения, код " + (v.error ? v.error.code : "?"))));
+V.el.forEach(v => v.addEventListener("playing", () => vlog("")));
+V.el.forEach((v, k) => v.addEventListener("loadeddata", () => { if (k === V.cur && !state.playing) vlog("Видео готово, нажмите Пуск или кликните по шкале"); }));
+V.el.forEach((v, k) => v.addEventListener("ended", () => {
+  if (k !== V.cur) return;
+  if (V.idx + 1 >= V.n) { pause(); return; }
+  const next = V.el[1 - V.cur];
+  V.idx += 1; V.cur = 1 - V.cur;
+  next.currentTime = 0; next.classList.remove("off"); v.classList.add("off");
+  if (state.playing) next.play().catch(() => {});
+  if (V.idx + 1 < V.n) loadInto(v, V.idx + 1, 0, false);
+}));
+$("play").addEventListener("click", () => state.playing ? pause() : play());
+function tick() { if (state.data) { const t = globalTime(); if (Math.abs(t - state.t) > 0.02) { state.t = t; drawFrame(); } } requestAnimationFrame(tick); }
+
+/* ---------------- timeline scrubber with possession + events */
+function drawScrub() {
+  const c = $("scrubc"), r = c.getBoundingClientRect(); const W = Math.max(200, Math.round(r.width * 2)); c.width = W;
+  const ctx = c.getContext("2d"), H = c.height, d = state.data, dur = d.meta.duration_s;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = "#e6e9e3"; ctx.fillRect(0, 16, W, 18);
+  d.possession_timeline.forEach((tm, s) => { if (tm == null) return; ctx.fillStyle = teamOf(tm).color; ctx.fillRect(s / dur * W, 16, Math.ceil(W / dur) + 1, 18); });
+  d.events.forEach(e => { const x = e.t / dur * W; ctx.fillStyle = e.type === "shot" ? "#b7791f" : e.type === "turnover" ? "#c2412d" : "#1f8a4c"; ctx.fillRect(x - 1, e.type === "pass" ? 38 : 36, 3, e.type === "pass" ? 10 : 14); });
+  const x = state.t / dur * W; ctx.fillStyle = "#1f4fd1"; ctx.fillRect(x - 2, 4, 4, 46);
+}
+$("scrub").addEventListener("pointerdown", (ev) => {
+  const go = (e) => { const r = $("scrub").getBoundingClientRect(); seek((e.clientX - r.left) / r.width * state.data.meta.duration_s); };
+  go(ev); const mv = (e) => go(e); const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+  window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+});
+
+/* ---------------- pitch drawing */
+function drawPitch(ctx, W, H, opts = {}) {
+  const sx = W / PL, sy = H / PW;
+  ctx.fillStyle = "#e9f0e6"; ctx.fillRect(0, 0, W, H);
+  for (let i = 0; i < 10; i++) if (i % 2 === 0) { ctx.fillStyle = "#e3ecdf"; ctx.fillRect(i * W / 10, 0, W / 10, H); }
+  ctx.strokeStyle = "#b9cbb3"; ctx.lineWidth = Math.max(1.5, W / 520);
+  const R = (x, y, w, h) => ctx.strokeRect(x * sx, y * sy, w * sx, h * sy);
+  R(0.4, 0.4, PL - 0.8, PW - 0.8);
+  ctx.beginPath(); ctx.moveTo(PL / 2 * sx, 0); ctx.lineTo(PL / 2 * sx, H); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(PL / 2 * sx, PW / 2 * sy, 9.15 * sx, 9.15 * sy, 0, 0, Math.PI * 2); ctx.stroke();
+  R(0.4, PW / 2 - 20.16, 16.5, 40.32); R(PL - 16.9, PW / 2 - 20.16, 16.5, 40.32);
+  R(0.4, PW / 2 - 9.16, 5.5, 18.32); R(PL - 5.9, PW / 2 - 9.16, 5.5, 18.32);
+  ctx.fillStyle = "#b9cbb3";
+  [[11, PW / 2], [PL - 11, PW / 2], [PL / 2, PW / 2]].forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x * sx, y * sy, Math.max(2, W / 400), 0, 7); ctx.fill(); });
+  return { sx, sy };
+}
+function frameAt(t) { const r = state.data.replay; const i = Math.max(0, Math.min(r.length - 1, Math.round(t * 5))); return { fr: r[i], i }; }
+function drawFrame() {
+  const c = $("pitch"), ctx = c.getContext("2d"), W = c.width, H = c.height, d = state.data;
+  const { sx, sy } = drawPitch(ctx, W, H);
+  const { fr, i } = frameAt(state.t);
+  // trail for selected player
+  if (state.sel != null) {
+    ctx.strokeStyle = "rgba(31,79,209,.55)"; ctx.lineWidth = 3; ctx.beginPath(); let started = false;
+    for (let k = Math.max(0, i - 25); k <= i; k++) { const o = d.replay[k].p.find(p => p[0] === state.sel); if (!o) { started = false; continue; } if (!started) { ctx.moveTo(o[1] * sx, o[2] * sy); started = true; } else ctx.lineTo(o[1] * sx, o[2] * sy); }
+    ctx.stroke();
+  }
+  fr.p.forEach(([id, x, y]) => {
+    const p = playerById(id); if (!p) return; const tm = teamOf(p.team);
+    const r = p.role === "goalkeeper" ? 13 : 11;
+    ctx.beginPath(); ctx.arc(x * sx, y * sy, r, 0, 7); ctx.fillStyle = tm.color; ctx.fill();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = p.role === "goalkeeper" ? "#f2c94c" : "#ffffff"; ctx.stroke();
+    if (fr.o === id) { ctx.beginPath(); ctx.arc(x * sx, y * sy, r + 6, 0, 7); ctx.strokeStyle = "#1f4fd1"; ctx.lineWidth = 3; ctx.stroke(); }
+    if (state.sel === id) { ctx.beginPath(); ctx.arc(x * sx, y * sy, r + 10, 0, 7); ctx.strokeStyle = "rgba(31,79,209,.6)"; ctx.lineWidth = 2; ctx.stroke(); }
+    ctx.fillStyle = "#ffffff"; ctx.font = "600 11px Golos Text, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(dotText(p), x * sx, y * sy + 0.5);
+  });
+  if (fr.b) { ctx.beginPath(); ctx.arc(fr.b[0] * sx, fr.b[1] * sy, 6, 0, 7); ctx.fillStyle = "#ffffff"; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = "#17202b"; ctx.stroke(); }
+  const seg = SEGMENTS[state.seg];
+  $("clock").textContent = clockAt(seg, state.t) + "  " + fmtT(state.t);
+  const ow = fr.o != null ? playerById(fr.o) : null;
+  $("ownerNow").textContent = ow ? "Мяч у: " + pname(ow) + (ow.num || ow.label ? "" : ", " + teamOf(ow.team).name) : "";
+  drawScrub(); markFeed();
+}
+const fmtT = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+
+/* ---------------- event feed */
+function renderFeed() {
+  const d = state.data, seg = SEGMENTS[state.seg];
+  const lab = { pass: "Передача", turnover: "Потеря", shot: "Удар" };
+  $("feed").innerHTML = d.events.map((e, k) => {
+    const tm = teamOf(e.team);
+    const nm = (id) => { const q = playerById(id); if (!q) return "ID " + id; return q.label && q.num ? `${q.label} #${q.num}` : q.num ? "#" + q.num : q.label || "ID " + q.id; };
+    let txt = e.type === "shot" ? `${tm.name}, ${fmt(e.speed_kmh)} км/ч` : `${tm.name}: ${nm(e.from)} → ${e.type === "pass" ? nm(e.to) : teamOf(playerById(e.to).team).name + " " + nm(e.to)}`;
+    if (e.length_m) txt += `, ${fmt(e.length_m)} м`;
+    return `<button type="button" data-k="${k}" data-t="${e.t}"><span class="num muted">${clockAt(seg, e.t)}</span><span class="chip ${e.type}">${lab[e.type]}</span><span>${txt}</span></button>`;
+  }).join("") || `<p class="note" style="padding:8px">В этом фрагменте событий с мячом не найдено.</p>`;
+  $("feed").querySelectorAll("button").forEach(b => b.addEventListener("click", () => { seek(+b.dataset.t - 1); play(); }));
+  const T = Object.values(d.teams);
+  $("legend").innerHTML = T.map(t => `<span><span class="dot" style="background:${t.color}"></span>${t.name}${t.video_color ? " (на видео " + t.video_color + ")" : ""}</span>`).join("") + `<span><span class="dot" style="background:#fff;border-color:#17202b"></span>мяч</span><span><span class="dot" style="background:#fff;box-shadow:0 0 0 2px #1f4fd1"></span>владеет мячом</span>`;
+  $("tlLegend").innerHTML = `<span>Полоса: команда, владеющая мячом</span><span><span class="dot" style="background:#1f8a4c"></span>передача</span><span><span class="dot" style="background:#c2412d"></span>потеря</span><span><span class="dot" style="background:#b7791f"></span>удар</span>`;
+}
+let lastNow = -1;
+function markFeed() {
+  const ev = state.data.events; let k = -1;
+  for (let i = 0; i < ev.length; i++) if (ev[i].t <= state.t + 0.1) k = i;
+  if (k === lastNow) return; lastNow = k;
+  $("feed").querySelectorAll("button").forEach(b => b.classList.toggle("now", +b.dataset.k === k));
+}
+
+/* ---------------- team comparison */
+function renderCompare() {
+  const T = Object.values(state.data.teams).sort((a, b) => (a.name === "Барс" ? -1 : 1));
+  const rows = [
+    ["possession_pct", "Владение, %", 0], ["passes", "Передачи", 0], ["pass_accuracy_pct", "Точность передач, %", 0],
+    ["shots", "Удары", 0], ["distance_m", "Дистанция, м", 0], ["distance_per_player_min", "Темп, м/мин на игрока", 1],
+    ["hsr_m", "Быстрый бег > 20 км/ч, м", 0], ["sprints", "Спринты", 0], ["top_speed_kmh", "Макс. скорость, км/ч", 1],
+    ["pressure_avg", "Давление на владельца (соперников в 5 м)", 2], ["compactness_m", "Компактность, м (меньше = плотнее)", 1],
+    ["width_m", "Ширина, м", 1], ["def_line_m", "Линия обороны от своих ворот, м", 1],
+  ];
+  const chips = (t) => (t.stats.labels || []).map(l => `<span class="chip tag">${l}</span>`).join("");
+  $("compare").innerHTML = `<div class="crow"><div class="tagrow" style="justify-content:flex-end"><b>${T[0].name}</b>${chips(T[0])}</div><div class="lab">тактический профиль</div><div class="tagrow"><b>${T[1].name}</b>${chips(T[1])}</div></div>` + rows.map(([k, lab, dd]) => {
+    const a = T[0].stats[k], b = T[1].stats[k]; const mx = Math.max(a || 0, b || 0) || 1;
+    return `<div class="crow"><div class="bar l"><b>${fmt(a, dd)}</b><i style="width:${(a || 0) / mx * 70}%;background:${T[0].color}"></i></div><div class="lab">${lab}</div><div class="bar"><b>${fmt(b, dd)}</b><i style="width:${(b || 0) / mx * 70}%;background:${T[1].color}"></i></div></div>`;
+  }).join("");
+}
+
+/* ---------------- players table + card */
+const COLS = [
+  ["id", "Игрок"], ["on_screen_s", "В кадре, с"], ["distance_m", "Дист., м"], ["distance_per_min", "м/мин"],
+  ["max_speed_kmh", "Макс., км/ч"], ["sprints", "Спринты"], ["hsr_m", "> 20 км/ч, м"], ["touches", "Касания"],
+  ["passes", "Передачи"], ["passes_received", "Приемы"], ["rating", "Рейтинг"],
+];
+function renderTable() {
+  const d = state.data, s = state.sort;
+  const rows = d.players.slice().sort((a, b) => s.key === "id" ? (a.team - b.team || a.id - b.id) * -s.dir * -1 : ((a[s.key] ?? -1) - (b[s.key] ?? -1)) * s.dir);
+  $("ptable").innerHTML = `<thead><tr>${COLS.map(([k, l]) => `<th><button type="button" data-k="${k}" ${s.key === k ? `aria-sort="${s.dir < 0 ? "descending" : "ascending"}"` : ""}>${l}${s.key === k ? (s.dir < 0 ? " ↓" : " ↑") : ""}</button></th>`).join("")}</tr></thead><tbody>${rows.map(p => {
+    const tm = teamOf(p.team);
+    const ok = (p.measured_s || 0) >= 5, phys = (v, d = 0) => ok ? fmt(v, d) : "-";
+    return `<tr data-id="${p.id}" tabindex="0" aria-selected="${state.sel === p.id}"><td><span class="pname"><span class="kit" style="height:16px;width:8px;background:${tm.color}"></span>${pname(p)}</span></td><td>${fmt(p.on_screen_s)}</td><td>${phys(p.distance_m)}</td><td>${phys(p.distance_per_min)}</td><td>${phys(p.max_speed_kmh, 1)}</td><td>${ok ? p.sprints : "-"}</td><td>${phys(p.hsr_m)}</td><td>${p.touches}</td><td>${p.passes ? p.passes_completed + "/" + p.passes : "-"}</td><td>${p.passes_received || "-"}</td><td>${fmt(p.rating, 1)}</td></tr>`;
+  }).join("")}</tbody>`;
+  $("ptable").querySelectorAll("th button").forEach(b => b.addEventListener("click", () => { const k = b.dataset.k; state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : -1 }; renderTable(); }));
+  $("ptable").querySelectorAll("tbody tr").forEach(tr => { const f = () => selectPlayer(+tr.dataset.id); tr.addEventListener("click", f); tr.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); f(); } }); });
+}
+function selectPlayer(id) { state.sel = id; renderTable(); renderCard(); drawFrame(); }
+function renderCard() {
+  const d = state.data; const p = playerById(state.sel) || d.players[0]; if (!p) { $("pcard").innerHTML = ""; return; }
+  state.sel = p.id; const tm = teamOf(p.team);
+  const zt = Object.values(p.zones_m).reduce((a, b) => a + b, 0) || 1;
+  $("pcard").innerHTML = `
+    <div class="pair"><div class="pname" style="font-size:16px"><span class="kit" style="height:20px;width:9px;background:${tm.color}"></span>${pname(p)}</div><span class="muted">${tm.name}, в кадре ${fmt(p.on_screen_s)} с, скорость измерена на ${fmt(p.measured_s)} с</span></div>
+    <div class="stats3"><div><b class="num">${fmt(p.distance_m)} м</b><span>дистанция, ${fmt(p.distance_per_min)} м/мин</span></div><div><b class="num">${fmt(p.max_speed_kmh, 1)}</b><span>макс. км/ч, средн. ${fmt(p.avg_speed_kmh, 1)}</span></div><div><b class="num">${p.sprints} / ${p.accelerations}</b><span>спринты / рывки</span></div></div>
+    <div class="eyebrow">Тепловая карта</div><canvas id="heat" width="1050" height="680"></canvas>
+    <div class="eyebrow">Скорость по ходу фрагмента, км/ч</div><div id="spd"></div>
+    <div class="eyebrow">Дистанция по зонам скорости</div>
+    <div class="split" style="height:14px">${Object.entries(p.zones_m).map(([z, m]) => `<i title="${ZONE_NAMES[z]}: ${fmt(m)} м" style="width:${m / zt * 100}%;background:${ZONE_COL[z]}"></i>`).join("")}</div>
+    <div class="legend">${Object.entries(p.zones_m).map(([z, m]) => `<span><span class="dot" style="background:${ZONE_COL[z]}"></span>${ZONE_NAMES[z]}: ${fmt(m)} м</span>`).join("")}</div>
+    <div class="stats3"><div><b class="num">${p.touches}</b><span>касаний, ${fmt(p.on_ball_s, 1)} с с мячом</span></div><div><b class="num">${p.passes ? p.passes_completed + "/" + p.passes : "0"}</b><span>передачи (точные/все)</span></div><div><b class="num">${p.passes_received} / ${p.ball_wins}</b><span>приемы / отборы и перехваты</span></div></div>`;
+  drawHeat(p); drawSpeed(p);
+}
+function drawHeat(p) {
+  const c = $("heat"), ctx = c.getContext("2d"), W = c.width, H = c.height; const { sx, sy } = drawPitch(ctx, W, H);
+  const g = p.heat, ny = g.length, nx = g[0].length; const mx = Math.max(1, ...g.flat());
+  const off = document.createElement("canvas"); off.width = nx; off.height = ny; const o = off.getContext("2d");
+  const img = o.createImageData(nx, ny);
+  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) { const v = g[y][x] / mx; const k = (y * nx + x) * 4; img.data[k] = 220; img.data[k + 1] = 70 + 120 * (1 - v); img.data[k + 2] = 40; img.data[k + 3] = v > 0 ? 40 + 200 * v : 0; }
+  o.putImageData(img, 0, 0);
+  ctx.save(); ctx.filter = "blur(18px)"; ctx.imageSmoothingEnabled = true; ctx.drawImage(off, 0, 0, W, H); ctx.restore();
+  drawPitchLinesOnly(ctx, W, H);
+  ctx.beginPath(); ctx.arc(p.avg_pos[0] * sx, p.avg_pos[1] * sy, 12, 0, 7); ctx.fillStyle = teamOf(p.team).color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#fff"; ctx.stroke();
+}
+function drawPitchLinesOnly(ctx, W, H) {
+  const sx = W / PL, sy = H / PW; ctx.strokeStyle = "rgba(120,140,115,.7)"; ctx.lineWidth = 2;
+  const R = (x, y, w, h) => ctx.strokeRect(x * sx, y * sy, w * sx, h * sy);
+  R(0.4, 0.4, PL - 0.8, PW - 0.8); ctx.beginPath(); ctx.moveTo(PL / 2 * sx, 0); ctx.lineTo(PL / 2 * sx, H); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(PL / 2 * sx, PW / 2 * sy, 9.15 * sx, 9.15 * sy, 0, 0, 7); ctx.stroke();
+  R(0.4, PW / 2 - 20.16, 16.5, 40.32); R(PL - 16.9, PW / 2 - 20.16, 16.5, 40.32);
+}
+function drawSpeed(p) {
+  const s = p.speed_timeline, n = s.length, W = 600, H = 120, L = 30, B = 18, top = 8;
+  const mx = 36; const x = (i) => L + i / Math.max(1, n - 1) * (W - L - 6); const y = (v) => H - B - v / mx * (H - B - top);
+  let path = "", area = "", open = false;
+  s.forEach((v, i) => { if (v == null) { open = false; return; } path += (open ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); open = true; });
+  const ticks = [0, 7, 14, 20, 25, 36].filter(v => v <= mx);
+  const tSec = Array.from({ length: Math.floor((n - 1) / 30) + 1 }, (_, k) => k * 30);
+  $("spd").innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Скорость игрока по времени">
+    ${[20, 25].map(v => `<rect x="${L}" y="${y(v === 20 ? 25 : mx)}" width="${W - L - 6}" height="${y(v) - y(v === 20 ? 25 : mx)}" fill="${v === 20 ? "rgba(224,123,57,.08)" : "rgba(194,65,45,.08)"}"/>`).join("")}
+    ${ticks.map(v => `<line x1="${L}" x2="${W - 6}" y1="${y(v)}" y2="${y(v)}" stroke="#e6e9e3"/><text x="${L - 6}" y="${y(v) + 3.5}" font-size="10" text-anchor="end" fill="#5a6472">${v}</text>`).join("")}
+    ${tSec.map(t => `<text x="${x(t)}" y="${H - 4}" font-size="10" text-anchor="middle" fill="#5a6472">${fmtT(t)}</text>`).join("")}
+    <path d="${path}" fill="none" stroke="${teamOf(p.team).color}" stroke-width="2"/>
+  </svg>`;
+}
+
+/* ---------------- pass networks */
+function renderNetworks() {
+  const d = state.data;
+  $("networks").innerHTML = Object.values(d.teams).map(t => `<div class="panel pad"><div class="pair"><b>${t.name}</b><span class="muted num">${t.stats.passes_completed} точных передач</span></div><canvas id="net${t.id}" width="1050" height="680" style="width:100%;height:auto;border-radius:6px"></canvas></div>`).join("");
+  Object.values(d.teams).forEach(t => {
+    const c = $("net" + t.id), ctx = c.getContext("2d"); const { sx, sy } = drawPitch(ctx, c.width, c.height);
+    const edges = d.network[String(t.id)] || []; const mx = Math.max(1, ...edges.map(e => e.n));
+    const pl = d.players.filter(p => p.team === t.id);
+    edges.forEach(e => { const a = playerById(e.from), b = playerById(e.to); if (!a || !b) return; ctx.strokeStyle = t.id === 0 ? "rgba(31,111,214,.55)" : "rgba(238,122,31,.6)"; ctx.lineWidth = 2 + 8 * e.n / mx; ctx.beginPath(); ctx.moveTo(a.avg_pos[0] * sx, a.avg_pos[1] * sy); ctx.lineTo(b.avg_pos[0] * sx, b.avg_pos[1] * sy); ctx.stroke(); });
+    pl.forEach(p => { const r = 10 + Math.min(14, (p.touches || 0) * 2); ctx.beginPath(); ctx.arc(p.avg_pos[0] * sx, p.avg_pos[1] * sy, r, 0, 7); ctx.fillStyle = t.color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#fff"; ctx.stroke(); ctx.fillStyle = "#fff"; ctx.font = "600 13px Golos Text, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(dotText(p), p.avg_pos[0] * sx, p.avg_pos[1] * sy); });
+  });
+}
+
+/* ---------------- team heatmaps */
+function heatOnCanvas(c, grid, rgb) {
+  const ctx = c.getContext("2d"), W = c.width, H = c.height; drawPitch(ctx, W, H);
+  const ny = grid.length, nx = grid[0].length, mx = Math.max(1, ...grid.flat());
+  const off = document.createElement("canvas"); off.width = nx; off.height = ny; const o = off.getContext("2d"); const img = o.createImageData(nx, ny);
+  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) { const v = grid[y][x] / mx, k = (y * nx + x) * 4; img.data[k] = rgb[0]; img.data[k + 1] = rgb[1]; img.data[k + 2] = rgb[2]; img.data[k + 3] = v > 0 ? 30 + 210 * v : 0; }
+  o.putImageData(img, 0, 0); ctx.save(); ctx.filter = "blur(18px)"; ctx.drawImage(off, 0, 0, W, H); ctx.restore(); drawPitchLinesOnly(ctx, W, H);
+}
+function renderTeamHeat() {
+  const d = state.data, T = Object.values(d.teams);
+  $("teamheat").innerHTML = T.map(t => `<div class="panel pad"><div class="pair"><b>${t.name}</b><span class="muted">защищает ${t.defends === "left" ? "левые" : "правые"} ворота на схеме</span></div><canvas id="th${t.id}" width="1050" height="680" style="width:100%;height:auto;border-radius:6px"></canvas></div>`).join("");
+  T.forEach(t => {
+    const pl = d.players.filter(p => p.team === t.id && p.role === "player"); if (!pl.length) return;
+    const g = pl[0].heat.map((row, y) => row.map((_, x) => pl.reduce((a, p) => a + p.heat[y][x], 0)));
+    heatOnCanvas($("th" + t.id), g, t.id === 0 ? [31, 111, 214] : [238, 122, 31]);
+  });
+}
+
+/* ---------------- average lineup */
+function renderShapes() {
+  const d = state.data, c = $("lineup"), ctx = c.getContext("2d"); const { sx, sy } = drawPitch(ctx, c.width, c.height);
+  d.players.forEach(p => {
+    const t = teamOf(p.team), x = p.avg_pos[0] * sx, y = p.avg_pos[1] * sy, r = p.role === "goalkeeper" ? 15 : 13;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = t.color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = p.role === "goalkeeper" ? "#f2c94c" : "#fff"; ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.font = "700 13px Golos Text, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(dotText(p), x, y + 0.5);
+    if (p.label) { ctx.font = "600 13px Golos Text, sans-serif"; ctx.fillStyle = "#17202b"; ctx.textBaseline = "top"; ctx.fillText(p.label, x, y + r + 4); }
+  });
+  $("lineupLegend").innerHTML = Object.values(d.teams).map(t => `<span><span class="dot" style="background:${t.color}"></span>${t.name}, защищает ${t.defends === "left" ? "левые" : "правые"} ворота</span>`).join("") + `<span>Цифра в кружке: номер на футболке, если его удалось прочитать на кадрах</span>`;
+}
+
+/* ---------------- notes */
+function renderNotes() {
+  $("foot").innerHTML = 'Барс - Өзгөн, Жогорку Лига 2026, 8-тур. Сделано <a href="https://1dev.uz" target="_blank" rel="noopener">1dev.uz</a>';
+}
+
+/* ---------------- load */
+async function loadSeg(i) {
+  state.seg = i; renderHeader();
+  const seg = SEGMENTS[i];
+  state.data = seg.inline || await fetch(seg.data).then(r => r.json());
+  if (!state.data.players.find(p => p.id === state.sel)) state.sel = (state.data.players.slice().sort((a, b) => b.distance_m - a.distance_m)[0] || {}).id;
+  renderTeams(); renderKpis(); renderFeed(); renderCompare(); renderTable(); renderCard(); renderNetworks(); renderTeamHeat(); renderShapes(); renderNotes();
+  setupVideo(); lastNow = -1; drawFrame();
+}
+window.addEventListener("resize", () => state.data && drawScrub());
+if (SEGMENTS.length) { loadSeg(0); requestAnimationFrame(tick); }
+</script>
