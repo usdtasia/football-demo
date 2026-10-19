@@ -248,7 +248,7 @@ function renderKpis() {
   const k = [];
   k.push(card("Владение мячом", [fmt(pa) + "%", fmt(pb) + "%"], `<div class="split"><i style="width:${pa / tot * 100}%;background:${T[0].color}"></i><i style="width:${pb / tot * 100}%;background:${T[1].color}"></i></div>`));
   k.push(card("Передачи: точные из всех", [`${a.passes_completed} из ${a.passes}`, `${b.passes_completed} из ${b.passes}`], `<div class="muted num">точность ${fmt(a.pass_accuracy_pct)}% и ${fmt(b.pass_accuracy_pct)}%</div>`));
-  k.push(card("Удары", [fmt(a.shots), fmt(b.shots)]));
+  k.push(card("Удары", [fmt(a.shots), fmt(b.shots)], `<div class="muted num">в створ: ${fmt(a.shots_on_target)} и ${fmt(b.shots_on_target)}</div>`));
   k.push(card("Темп, м/мин на игрока", [fmt(a.distance_per_player_min), fmt(b.distance_per_player_min)], `<div class="muted num">всего ${fmt(a.distance_m)} и ${fmt(b.distance_m)} м</div>`));
   k.push(card("Спринты быстрее 25 км/ч", [fmt(a.sprints), fmt(b.sprints)], `<div class="muted num">бег > 20 км/ч: ${fmt(a.hsr_m)} и ${fmt(b.hsr_m)} м</div>`));
   const top = d.players.filter(p => (p.measured_s || 0) >= 5).sort((x, y) => y.max_speed_kmh - x.max_speed_kmh)[0];
@@ -385,18 +385,21 @@ const fmtT = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart
 /* ---------------- event feed */
 function renderFeed() {
   const d = state.data, seg = SEGMENTS[state.seg];
-  const lab = { pass: "Передача", turnover: "Потеря", shot: "Удар" };
+  const lab = (e) => e.type === "pass" ? "Передача" : e.type === "shot" ? "Удар" : e.kind === "tackle" ? "Отбор" : "Перехват";
+  const shotRes = { on_target: "в створ, взял вратарь", blocked: "заблокирован", unknown: "исход неясен" };
   $("feed").innerHTML = d.events.map((e, k) => {
     const tm = teamOf(e.team);
     const nm = (id) => { const q = playerById(id); if (!q) return "ID " + id; return q.label && q.num ? `${q.label} #${q.num}` : q.num ? "#" + q.num : q.label || "ID " + q.id; };
-    let txt = e.type === "shot" ? `${tm.name}, ${fmt(e.speed_kmh)} км/ч` : `${tm.name}: ${nm(e.from)} → ${e.type === "pass" ? nm(e.to) : teamOf(playerById(e.to).team).name + " " + nm(e.to)}`;
+    let txt = e.type === "shot" ? `${tm.name}, ${fmt(e.speed_kmh)} км/ч, ${shotRes[e.outcome] || shotRes.unknown}${e.by != null ? " (" + nm(e.by) + ")" : ""}`
+      : e.type === "pass" ? `${tm.name}: ${nm(e.from)} → ${nm(e.to)}`
+      : `${teamOf(playerById(e.to).team).name}: ${nm(e.to)} у ${tm.name} ${nm(e.from)}`;   // tackle / interception: the winning team first
     if (e.length_m) txt += `, ${fmt(e.length_m)} м`;
-    return `<button type="button" data-k="${k}" data-t="${e.t}"><span class="num muted">${clockAt(seg, e.t)}</span><span class="chip ${e.type}">${lab[e.type]}</span><span>${txt}</span></button>`;
+    return `<button type="button" data-k="${k}" data-t="${e.t}"><span class="num muted">${clockAt(seg, e.t)}</span><span class="chip ${e.type}">${lab(e)}</span><span>${txt}</span></button>`;
   }).join("") || `<p class="note" style="padding:8px">В этом фрагменте событий с мячом не найдено.</p>`;
   $("feed").querySelectorAll("button").forEach(b => b.addEventListener("click", () => { seek(+b.dataset.t - 1); play(); }));
   const T = Object.values(d.teams);
   $("legend").innerHTML = T.map(t => `<span><span class="dot" style="background:${t.color}"></span>${t.name}${t.video_color ? " (на видео " + t.video_color + ")" : ""}</span>`).join("") + `<span><span class="dot" style="background:#fff;border-color:#17202b"></span>мяч</span><span><span class="dot" style="background:#fff;box-shadow:0 0 0 2px #1f4fd1"></span>владеет мячом</span>`;
-  $("tlLegend").innerHTML = `<span>Полоса: команда, владеющая мячом</span><span><span class="dot" style="background:#1f8a4c"></span>передача</span><span><span class="dot" style="background:#c2412d"></span>потеря</span><span><span class="dot" style="background:#b7791f"></span>удар</span>`;
+  $("tlLegend").innerHTML = `<span>Полоса: команда, владеющая мячом</span><span><span class="dot" style="background:#1f8a4c"></span>передача</span><span><span class="dot" style="background:#c2412d"></span>потеря (отбор или перехват)</span><span><span class="dot" style="background:#b7791f"></span>удар</span>`;
 }
 let lastNow = -1;
 function markFeed() {
@@ -411,7 +414,8 @@ function renderCompare() {
   const T = Object.values(state.data.teams).sort((a, b) => (a.name === "Барс" ? -1 : 1));
   const rows = [
     ["possession_pct", "Владение, %", 0], ["passes", "Передачи", 0], ["pass_accuracy_pct", "Точность передач, %", 0],
-    ["shots", "Удары", 0], ["distance_m", "Дистанция, м", 0], ["distance_per_player_min", "Темп, м/мин на игрока", 1],
+    ["tackles", "Отборы", 0], ["interceptions", "Перехваты", 0],
+    ["shots", "Удары", 0], ["shots_on_target", "Удары в створ", 0], ["distance_m", "Дистанция, м", 0], ["distance_per_player_min", "Темп, м/мин на игрока", 1],
     ["hsr_m", "Быстрый бег > 20 км/ч, м", 0], ["sprints", "Спринты", 0], ["top_speed_kmh", "Макс. скорость, км/ч", 1],
     ["pressure_avg", "Давление на владельца (соперников в 5 м)", 2], ["compactness_m", "Компактность, м (меньше = плотнее)", 1],
     ["width_m", "Ширина, м", 1], ["def_line_m", "Линия обороны от своих ворот, м", 1],
