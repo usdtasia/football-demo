@@ -60,7 +60,8 @@ section { padding-block: 22px; display: grid; gap: 14px; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px; }
 .kpi .v { font-family: var(--display); font-size: 20px; font-weight: 500; }
-.kv { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; min-width: 0; }
+.kv { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; column-gap: 8px; min-width: 0; }
+.kv .tn { flex-shrink: 0; }   /* a narrow card wraps the value under the team name instead of overlapping it */
 .kv b { font-family: var(--display); font-size: 18px; font-weight: 500; white-space: nowrap; }
 .tn { font-size: 12px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .tn i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
